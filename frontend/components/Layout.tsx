@@ -1,7 +1,8 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { logout, getStoredUser } from '../lib/api';
+import type { User } from '../lib/types';
 
 interface LayoutProps {
   children: ReactNode;
@@ -9,7 +10,13 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const router = useRouter();
-  const user = typeof window !== 'undefined' ? getStoredUser() : null;
+  const [user, setUser] = useState<User | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    setUser(getStoredUser());
+  }, []);
 
   // Don't show layout on login/register page
   if (router.pathname === '/') {

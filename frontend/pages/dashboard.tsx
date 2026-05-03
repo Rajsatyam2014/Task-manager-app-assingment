@@ -13,7 +13,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const user = typeof window !== 'undefined' ? getStoredUser() : null;
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    setUser(getStoredUser());
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
