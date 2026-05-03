@@ -1,0 +1,25 @@
+[build]
+builder = "NIXPACKS"
+watchEdges = [
+  "backend/**",
+  "frontend/**"
+]
+
+[deploy]
+startCommand = "npm start"
+
+[[services]]
+name = "backend"
+watchEdges = ["backend/**"]
+builder = "NIXPACKS"
+buildCommand = "npm install && npx prisma generate && npm run build"
+startCommand = "npx prisma db push && npm start"
+source = "backend"
+
+[[services]]
+name = "frontend"
+watchEdges = ["frontend/**"]
+builder = "NIXPACKS"
+buildCommand = "npm install && npm run build"
+startCommand = "npm start"
+source = "frontend"

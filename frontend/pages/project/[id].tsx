@@ -2,22 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { request, logout } from '../../lib/api';
 import type { Project, Task } from '../../lib/types';
-
-const statusLabels: Record<string, string> = {
-  TO_DO: 'To do',
-  IN_PROGRESS: 'In progress',
-  COMPLETED: 'Completed',
-};
+import Kanban from '../../components/Kanban';
+import { motion } from 'framer-motion';
 
 export default function ProjectDetailPage() {
   const router = useRouter();
   const { id } = router.query;
   const [project, setProject] = useState<Project | null>(null);
+  
+  // Modals
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  
+  // Forms
   const [memberEmail, setMemberEmail] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
+  const [taskStatus, setTaskStatus] = useState('TO_DO');
+  
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -29,9 +33,6 @@ export default function ProjectDetailPage() {
     try {
       const data = await request<Project>(`/api/projects/${id}`);
       setProject(data);
-      if (data.members.length > 0) {
-        setAssigneeId(data.members[0].user.id);
-      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load project';
       setError(message);
@@ -45,8 +46,7 @@ export default function ProjectDetailPage() {
   }, [id, router]);
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    if (!token) {
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
       router.replace('/');
       return;
     }
@@ -66,6 +66,7 @@ export default function ProjectDetailPage() {
         body: JSON.stringify({ email: memberEmail, role: 'MEMBER' }),
       });
       setMemberEmail('');
+      setIsInviteModalOpen(false);
       await loadProject();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invitation failed');
@@ -86,234 +87,184 @@ export default function ProjectDetailPage() {
           projectId: project.id,
           dueDate: taskDueDate || undefined,
           assigneeId: assigneeId || undefined,
+          status: taskStatus
         }),
       });
       setTaskTitle('');
       setTaskDescription('');
       setTaskDueDate('');
+      setIsTaskModalOpen(false);
       await loadProject();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Task creation failed');
     }
   };
 
-  const updateTaskStatus = async (task: Task, status: string) => {
-    setError('');
-    try {
-      await request<Task>(`/api/tasks/${task.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          title: task.title,
-          description: task.description,
-          status,
-          dueDate: task.dueDate || undefined,
-          assigneeId: task.assigneeId || undefined,
-        }),
-      });
-      await loadProject();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Update failed');
+  const openTaskModal = (task?: Partial<Task>) => {
+    if (task && task.status) {
+      setTaskStatus(task.status);
+    } else {
+      setTaskStatus('TO_DO');
     }
-  };
-
-  const deleteTask = async (taskId: string) => {
-    setError('');
-    try {
-      await request(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      await loadProject();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
-    }
+    // We are currently using this modal only for creation in this demo
+    setTaskTitle('');
+    setTaskDescription('');
+    setIsTaskModalOpen(true);
   };
 
   if (!project && loading) {
-    return (
-      <main className="main-shell">
-        <p className="small-text">Loading project…</p>
-      </main>
-    );
+    return <div style={{ padding: 40, color: 'var(--text-secondary)' }}>Loading project...</div>;
   }
 
   if (!project) {
-    return (
-      <main className="main-shell">
-        <div className="page-header">
-          <button className="secondary" type="button" onClick={() => router.push('/dashboard')}>
-            Back to dashboard
-          </button>
-        </div>
-        {error ? <div className="alert">{error}</div> : <p className="small-text">Project not found.</p>}
-      </main>
-    );
+    return <div style={{ padding: 40, color: 'var(--text-secondary)' }}>Project not found or you don't have access.</div>;
   }
 
   return (
-    <main className="main-shell">
-      <div className="page-header">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="flex-between" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">{project.name}</h1>
-          <p className="small-text">{project.description || 'No description provided.'}</p>
+          <div className="flex-gap" style={{ marginBottom: 8 }}>
+            <span className="small-text" style={{ textTransform: 'uppercase' }}>Projects</span>
+            <span className="small-text">/</span>
+            <span className="small-text">{project.name}</span>
+          </div>
+          <h1 style={{ fontSize: '1.8rem', margin: 0 }}>{project.name} Active Sprint</h1>
         </div>
-        <button className="secondary" type="button" onClick={() => router.push('/dashboard')}>
-          ← Back
-        </button>
-      </div>
-
-      {error ? <div className="alert">{error}</div> : null}
-
-      <div className="dashboard-grid">
-        <section className="card">
-          <h2>Invite teammate</h2>
-          <p className="small-text">Add existing users to this project to collaborate on tasks.</p>
-          <form onSubmit={handleInvite}>
-            <div className="form-group">
-              <label htmlFor="memberEmail">Email address</label>
-              <input
-                id="memberEmail"
-                type="email"
-                value={memberEmail}
-                onChange={(event) => setMemberEmail(event.target.value)}
-                placeholder="teammate@company.com"
-                required
-              />
-            </div>
-            <button className="primary" type="submit">
-              + Invite
-            </button>
-          </form>
-
-          <div style={{ marginTop: 24 }}>
-            <h3 style={{ marginBottom: 16, fontSize: '1.1rem', fontWeight: 600 }}>Team Members ({projectMembers.length})</h3>
-            {projectMembers.length === 0 ? (
-              <p className="small-text">No members added yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {projectMembers.map((member) => (
-                  <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(30, 40, 70, 0.4)', borderRadius: '10px' }}>
-                    <div>
-                      <p style={{ margin: 0, fontWeight: 500, color: '#f1f5f9' }}>{member.user.name}</p>
-                      <p className="small-text" style={{ margin: '4px 0 0' }}>{member.user.email}</p>
-                    </div>
-                    <span className="badge">{member.role.toLowerCase()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>Add a task</h2>
-          <form onSubmit={handleAddTask}>
-            <div className="form-group">
-              <label htmlFor="taskTitle">Title</label>
-              <input
-                id="taskTitle"
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="Task description"
-                required
-                minLength={3}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="taskDescription">Details</label>
-              <textarea
-                id="taskDescription"
-                rows={3}
-                value={taskDescription}
-                onChange={(event) => setTaskDescription(event.target.value)}
-                placeholder="Add context and details"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="taskDueDate">Due date</label>
-              <input
-                id="taskDueDate"
-                type="date"
-                value={taskDueDate}
-                onChange={(event) => setTaskDueDate(event.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="assigneeId">Assign to</label>
-              <select
-                id="assigneeId"
-                value={assigneeId}
-                onChange={(event) => setAssigneeId(event.target.value)}
-              >
-                <option value="">Unassigned</option>
-                {projectMembers.map((member) => (
-                  <option key={member.id} value={member.user.id}>
-                    {member.user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button className="primary" type="submit">
-              + Create task
-            </button>
-          </form>
-        </section>
-      </div>
-
-      <section style={{ marginTop: 32 }}>
-        <h2>Tasks ({project.tasks?.length || 0})</h2>
-        {project.tasks?.length === 0 ? (
-          <div className="card">
-            <p className="small-text">✨ No tasks yet. Create one using the form above to get started.</p>
-          </div>
-        ) : (
-          <div className="grid">
-            {project.tasks?.map((task) => (
-              <div key={task.id} className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 600, color: '#f1f5f9' }}>
-                    {task.title}
-                  </h3>
-                  {task.description && (
-                    <p className="small-text" style={{ marginBottom: 8 }}>
-                      {task.description}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span className={`status-pill status-${task.status.toLowerCase()}`}>
-                      {statusLabels[task.status]}
-                    </span>
-                    {task.assignee && (
-                      <span className="small-text">👤 {task.assignee.name}</span>
-                    )}
-                    {task.dueDate && (
-                      <span className="small-text">📅 {new Date(task.dueDate).toLocaleDateString()}</span>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
-                  {(['TO_DO', 'IN_PROGRESS', 'COMPLETED'] as const).map((statusOption) => (
-                    <button
-                      key={statusOption}
-                      type="button"
-                      className="secondary"
-                      onClick={() => updateTaskStatus(task, statusOption)}
-                      style={{ fontSize: '0.85rem', padding: '8px 12px' }}
-                    >
-                      {statusLabels[statusOption]}
-                    </button>
-                  ))}
-                  <button 
-                    className="secondary" 
-                    type="button" 
-                    onClick={() => deleteTask(task.id)}
-                    style={{ fontSize: '0.85rem', padding: '8px 12px', marginLeft: 'auto', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
+        <div className="flex-gap">
+          <div className="flex-gap" style={{ gap: -8, marginRight: 16 }}>
+            {projectMembers.map((m, i) => (
+               <div key={m.id} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-tertiary)', border: '2px solid var(--bg-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', zIndex: projectMembers.length-i }} title={m.user.name}>
+                 {m.user.name.charAt(0)}
+               </div>
             ))}
+            <button 
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', color: 'var(--text-secondary)', zIndex: 0, marginLeft: 8 }}
+              onClick={() => setIsInviteModalOpen(true)}
+              title="Add member"
+            >
+              +
+            </button>
           </div>
-        )}
-      </section>
-    </main>
+          <button className="btn btn-primary" onClick={() => openTaskModal()}>
+            Create Issue
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="alert">{error}</div>}
+
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <Kanban tasks={project.tasks || []} onUpdate={loadProject} onTaskClick={openTaskModal} />
+      </div>
+
+      {/* Task Modal */}
+      {isTaskModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsTaskModalOpen(false)}>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="modal-content glass-panel"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 600 }}
+          >
+            <div className="flex-between" style={{ marginBottom: 24 }}>
+              <h2>Create Issue</h2>
+              <button onClick={() => setIsTaskModalOpen(false)} style={{ color: 'var(--text-secondary)' }}>✕</button>
+            </div>
+            <form onSubmit={handleAddTask}>
+              <div className="form-group">
+                <label htmlFor="taskTitle">Summary</label>
+                <input
+                  id="taskTitle"
+                  value={taskTitle}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                  placeholder="What needs to be done?"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="taskDescription">Description</label>
+                <textarea
+                  id="taskDescription"
+                  rows={5}
+                  value={taskDescription}
+                  onChange={(event) => setTaskDescription(event.target.value)}
+                  placeholder="Add details, acceptance criteria, etc."
+                />
+              </div>
+              <div className="flex-gap" style={{ gap: 16 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label htmlFor="assigneeId">Assignee</label>
+                  <select
+                    id="assigneeId"
+                    value={assigneeId}
+                    onChange={(event) => setAssigneeId(event.target.value)}
+                  >
+                    <option value="">Unassigned</option>
+                    {projectMembers.map((member) => (
+                      <option key={member.id} value={member.user.id}>
+                        {member.user.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label htmlFor="taskStatus">Status</label>
+                  <select
+                    id="taskStatus"
+                    value={taskStatus}
+                    onChange={(event) => setTaskStatus(event.target.value)}
+                  >
+                    <option value="TO_DO">To Do</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Done</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex-gap" style={{ justifyContent: 'flex-end', marginTop: 32 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsTaskModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Create</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Invite Modal */}
+      {isInviteModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsInviteModalOpen(false)}>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="modal-content glass-panel"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex-between" style={{ marginBottom: 24 }}>
+              <h2>Add people to {project.name}</h2>
+              <button onClick={() => setIsInviteModalOpen(false)} style={{ color: 'var(--text-secondary)' }}>✕</button>
+            </div>
+            <form onSubmit={handleInvite}>
+              <div className="form-group">
+                <label htmlFor="memberEmail">Email address</label>
+                <input
+                  id="memberEmail"
+                  type="email"
+                  value={memberEmail}
+                  onChange={(event) => setMemberEmail(event.target.value)}
+                  placeholder="e.g. maria@company.com"
+                  required
+                />
+              </div>
+              <div className="flex-gap" style={{ justifyContent: 'flex-end', marginTop: 32 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsInviteModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Member</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </motion.div>
   );
 }

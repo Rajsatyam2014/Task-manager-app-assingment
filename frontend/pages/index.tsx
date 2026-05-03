@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { request } from '../lib/api';
 import type { User } from '../lib/types';
+import { motion } from 'framer-motion';
 
 const defaultForm = { name: '', email: '', password: '' };
 
@@ -45,7 +46,7 @@ export default function HomePage() {
 
       localStorage.setItem('token', result.token);
       localStorage.setItem('user', JSON.stringify(result.user as User));
-      router.replace('/dashboard');
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -54,45 +55,51 @@ export default function HomePage() {
   };
 
   return (
-    <main className="main-shell">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Team Task Manager</h1>
-          <p className="small-text">Manage projects, invite teammates, and track tasks with ease.</p>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.4 }}
+      style={{ width: '100%', maxWidth: 440 }}
+    >
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div style={{ width: 64, height: 64, borderRadius: 16, background: 'var(--accent-gradient)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white', fontSize: '2rem', marginBottom: 24, boxShadow: '0 8px 32px rgba(47,129,247,0.3)' }}>
+          E
         </div>
-        <button className="secondary" type="button" onClick={() => setIsRegister((current) => !current)}>
-          {isRegister ? '← Back to login' : 'Create account →'}
-        </button>
+        <h1 className="gradient-text" style={{ fontSize: '2.5rem', marginBottom: 8 }}>Ethara AI</h1>
+        <p className="small-text" style={{ fontSize: '1rem' }}>The agile project management tool for modern teams.</p>
       </div>
 
-      <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
-        <h2 style={{ marginTop: 0, marginBottom: 24, fontSize: '1.3rem' }}>
-          {isRegister ? '✨ Create your account' : '🔐 Welcome back'}
+      <div className="glass-panel" style={{ padding: 32 }}>
+        <h2 style={{ fontSize: '1.25rem', marginBottom: 24, textAlign: 'center' }}>
+          {isRegister ? 'Create your workspace' : 'Sign in to Ethara AI'}
         </h2>
+        
         {error ? <div className="alert">{error}</div> : null}
+        
         <form onSubmit={handleSubmit}>
-          {isRegister ? (
-            <div className="form-group">
-              <label htmlFor="name">Name</label>
+          {isRegister && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="form-group">
+              <label htmlFor="name">Full Name</label>
               <input
                 id="name"
                 value={form.name}
                 onChange={(event) => updateField('name', event.target.value)}
-                placeholder="Your name"
+                placeholder="Jane Doe"
                 required
                 minLength={2}
               />
-            </div>
-          ) : null}
+            </motion.div>
+          )}
 
           <div className="form-group">
-            <label htmlFor="email">Email address</label>
+            <label htmlFor="email">Work Email</label>
             <input
               id="email"
               type="email"
               value={form.email}
               onChange={(event) => updateField('email', event.target.value)}
-              placeholder="team@company.com"
+              placeholder="name@company.com"
               required
             />
           </div>
@@ -104,17 +111,23 @@ export default function HomePage() {
               type="password"
               value={form.password}
               onChange={(event) => updateField('password', event.target.value)}
-              placeholder="Enter a secure password"
+              placeholder="••••••••"
               minLength={6}
               required
             />
           </div>
 
-          <button type="submit" className="primary" disabled={loading} style={{ width: '100%' }}>
-            {loading ? '⏳ Working…' : isRegister ? '✓ Create account' : '→ Log in'}
+          <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%', marginTop: 16, padding: '12px' }}>
+            {loading ? 'Authenticating...' : isRegister ? 'Create Account' : 'Sign In'}
           </button>
         </form>
       </div>
-    </main>
+
+      <div style={{ textAlign: 'center', marginTop: 24 }}>
+        <button className="btn" style={{ color: 'var(--text-secondary)' }} type="button" onClick={() => setIsRegister((current) => !current)}>
+          {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+        </button>
+      </div>
+    </motion.div>
   );
 }
